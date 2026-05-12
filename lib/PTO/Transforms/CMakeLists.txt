@@ -20,6 +20,7 @@ add_mlir_dialect_library(PTOTransforms
   PTOVPTOPtrBoundary.cpp
   VPTOBufferMaterialization.cpp
   PTOValidateVPTOIR.cpp
+  PTOInferVPTOVecScope.cpp
 
   InsertSync/PTOInsertSync.cpp
   InsertSync/InsertSyncDebug.cpp
@@ -45,6 +46,8 @@ add_mlir_dialect_library(PTOTransforms
   PTOInferValidatePipeInitPass.cpp
   PTOResolveReservedBuffersPass.cpp
   PTOWrapFunctionsInSectionsPass.cpp
+  VPTONormalizeContainer.cpp
+  VPTOSplitCVModule.cpp
   InsertSync/PTOIRTranslator.cpp
   InsertSync/SyncCommon.cpp
   InsertSync/InsertSyncAnalysis.cpp

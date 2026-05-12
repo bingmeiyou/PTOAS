@@ -45,6 +45,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FileSystem.h"
@@ -77,7 +78,7 @@ namespace {
 // ============================================================================
 // OperandTypeInfo: describes one operand for template specialization.
 //
-// Three kinds of operands:
+// Four kinds of operands:
 //   Tile   — from TileBufType.  dtype + shape + memorySpace + config
 //            all participate in the specialization key (SpecKey).
 //   View   — from MemRefType (lowered PartitionTensorViewType). Only dtype
@@ -85,9 +86,13 @@ namespace {
 //            shape/strides/memorySpace don't affect code generation. They are
 //            carried here solely for JSON serialization to the Python DSL for
 //            constraint checking.
+//   Vector — from builtin VectorType. The element dtype and vector shape
+//            participate in SpecKey so helper-side schema filtering can
+//            distinguish auxiliary vector operands such as tmrgsort's
+//            `excuted : vector<4xi16>`.
 //   Scalar — from a scalar element type.  Only dtype participates in SpecKey.
 // ============================================================================
-enum class OperandKind { Tile, View, Scalar };
+enum class OperandKind { Tile, View, Vector, Scalar };
 
 struct OperandTypeInfo {
   OperandKind kind = OperandKind::Tile;
@@ -96,7 +101,7 @@ struct OperandTypeInfo {
   // --- Tile-only (TileBufType) ---
   SmallVector<int64_t, 2> tileShape;
   SmallVector<int64_t, 2> tileValidShape;
-  std::string tileMemorySpace; // "ub" or "gm"
+  std::string tileMemorySpace; // e.g. "ub", "gm", "mat", "left", "right", "acc", "bias"
   int32_t blayout = 0;
   int32_t slayout = 0;
   int32_t fractal = 0;
@@ -106,6 +111,9 @@ struct OperandTypeInfo {
   SmallVector<int64_t> viewShape;
   SmallVector<int64_t> viewStrides;
   std::string viewMemorySpace; // "gm" or "ub"
+
+  // --- Vector-only (builtin VectorType) ---
+  SmallVector<int64_t> vectorShape;
 
   /// Equality for SpecKey caching — only compares fields relevant to each kind.
   bool operator==(const OperandTypeInfo &rhs) const {
@@ -117,6 +125,8 @@ struct OperandTypeInfo {
              tileMemorySpace == rhs.tileMemorySpace &&
              blayout == rhs.blayout && slayout == rhs.slayout &&
              fractal == rhs.fractal && pad == rhs.pad;
+    if (kind == OperandKind::Vector)
+      return vectorShape == rhs.vectorShape;
     // View and Scalar: dtype alone is sufficient for template caching.
     return true;
   }
@@ -151,8 +161,11 @@ struct SpecKeyInfo : public llvm::DenseMapInfo<SpecKey> {
           h = llvm::hash_combine(h, d);
         for (int64_t d : op.tileValidShape)
           h = llvm::hash_combine(h, d);
+      } else if (op.kind == OperandKind::Vector) {
+        for (int64_t d : op.vectorShape)
+          h = llvm::hash_combine(h, d);
       }
-      // View/Scalar: only kind + dtype contribute to hash.
+      // View/Vector/Scalar: only kind + dtype contribute to hash.
     }
     for (const auto &[attrName, attrValue] : key.contextAttrs)
       h = llvm::hash_combine(h, attrName, attrValue);
@@ -199,18 +212,36 @@ static std::string getTargetArchString(ModuleOp mod) {
   return targetAttr.getValue().str();
 }
 
+static std::string stringifyMemorySpace(pto::AddressSpace space) {
+  switch (space) {
+  case pto::AddressSpace::GM:
+    return "gm";
+  case pto::AddressSpace::MAT:
+    return "mat";
+  case pto::AddressSpace::LEFT:
+    return "left";
+  case pto::AddressSpace::RIGHT:
+    return "right";
+  case pto::AddressSpace::ACC:
+    return "acc";
+  case pto::AddressSpace::BIAS:
+    return "bias";
+  case pto::AddressSpace::VEC:
+  case pto::AddressSpace::SCALING:
+  case pto::AddressSpace::Zero:
+    return "ub";
+  }
+  return "ub";
+}
+
 static std::string getMemorySpaceString(pto::TileBufType tbTy) {
   auto msAttr = dyn_cast_or_null<pto::AddressSpaceAttr>(tbTy.getMemorySpace());
-  if (!msAttr) return "ub";
-  if (msAttr.getAddressSpace() == pto::AddressSpace::GM) return "gm";
-  return "ub";
+  return msAttr ? stringifyMemorySpace(msAttr.getAddressSpace()) : "ub";
 }
 
 static std::string getMemorySpaceString(MemRefType mrTy) {
   auto msAttr = dyn_cast_or_null<pto::AddressSpaceAttr>(mrTy.getMemorySpace());
-  if (!msAttr) return "gm";
-  if (msAttr.getAddressSpace() == pto::AddressSpace::GM) return "gm";
-  return "ub";
+  return msAttr ? stringifyMemorySpace(msAttr.getAddressSpace()) : "gm";
 }
 
 static std::string getBLayoutString(int32_t blayout) {
@@ -247,6 +278,45 @@ static std::optional<std::string> getTCvtRoundModeString(pto::TCvtOp op) {
   return std::nullopt;
 }
 
+static StringRef getPrecisionModeString(pto::PrecisionMode mode) {
+  switch (mode) {
+  case pto::PrecisionMode::DEFAULT:
+    return "DEFAULT";
+  case pto::PrecisionMode::HIGH_PRECISION:
+    return "HIGH_PRECISION";
+  }
+  llvm_unreachable("unknown PrecisionMode");
+}
+
+// MUST stay in sync with template behavior. Adding an op here without a real
+// HIGH_PRECISION code path would silence the warning while preserving DEFAULT
+// behavior.
+static const llvm::StringSet<> &highPrecisionImplementedOps() {
+  static const llvm::StringSet<> kImplementedOps{};
+  return kImplementedOps;
+}
+
+template <typename OpT>
+static bool tryAppendPrecisionMode(
+    Operation *op,
+    SmallVectorImpl<std::pair<std::string, std::string>> &attrs) {
+  auto typed = dyn_cast<OpT>(op);
+  if (!typed)
+    return false;
+
+  pto::PrecisionMode mode = typed.getPrecisionMode();
+  attrs.emplace_back("precision_mode", getPrecisionModeString(mode).str());
+
+  if (mode == pto::PrecisionMode::HIGH_PRECISION &&
+      !highPrecisionImplementedOps().contains(op->getName().getStringRef())) {
+    StringRef opName = op->getName().getStringRef();
+    llvm::errs() << "warning: '" << opName << "' op " << opName
+                 << ": precision_mode = HIGH_PRECISION requested but not yet "
+                    "implemented; falling back to DEFAULT behavior\n";
+  }
+  return true;
+}
+
 static std::string getTRandomRoundsString(pto::TRandomOp op) {
   return std::to_string(op.getRounds());
 }
@@ -273,6 +343,15 @@ static void appendOpContextAttrs(
                          stringifyCmpMode(cmpModeAttr.getValue()).str());
     }
   }
+  (void)(tryAppendPrecisionMode<pto::TExpOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TLogOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TSqrtOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TRecipOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TRsqrtOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TDivOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TDivSOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TRowExpandDivOp>(op, attrs) ||
+         tryAppendPrecisionMode<pto::TColExpandDivOp>(op, attrs));
 }
 
 static bool getStaticIntFromValue(Value value, int64_t &out) {
@@ -417,6 +496,17 @@ static std::optional<OperandTypeInfo> buildOperandTypeInfo(Value value) {
     return info;
   }
 
+  // Auxiliary vector operand — from builtin VectorType (e.g. vector<4xi16>).
+  if (auto vecTy = dyn_cast<VectorType>(ty)) {
+    OperandTypeInfo info;
+    info.kind = OperandKind::Vector;
+    info.dtype = getDtypeString(vecTy.getElementType());
+    if (info.dtype.empty())
+      return std::nullopt;
+    info.vectorShape.assign(vecTy.getShape().begin(), vecTy.getShape().end());
+    return info;
+  }
+
   // Scalar operand — from a scalar element type.
   OperandTypeInfo info;
   info.kind = OperandKind::Scalar;
@@ -543,6 +633,13 @@ static std::string buildOperandSpecsJson(const SpecKey &key) {
         json += "]";
       }
       json += ",\"memory_space\":\"" + op.viewMemorySpace + "\"}";
+      continue;
+    }
+
+    if (op.kind == OperandKind::Vector) {
+      json += "{\"kind\":\"vector\",\"dtype\":\"" + op.dtype + "\",\"shape\":";
+      appendJsonIntArray(json, op.vectorShape);
+      json += "}";
       continue;
     }
 
@@ -719,7 +816,8 @@ func::FuncOp ExpandState::invokeTilelangDSL(const SpecKey &key,
   for (const auto &op : key.operands) {
     uniqueName += op.kind == OperandKind::Tile   ? "_tile"
                  : op.kind == OperandKind::View ? "_view"
-                                                : "_scalar";
+                 : op.kind == OperandKind::Vector ? "_vector"
+                                                  : "_scalar";
     uniqueName += "_" + op.dtype;
     if (op.kind == OperandKind::Tile) {
       for (int64_t d : op.tileShape)
@@ -730,6 +828,9 @@ func::FuncOp ExpandState::invokeTilelangDSL(const SpecKey &key,
       uniqueName += "_sl" + std::to_string(op.slayout);
       uniqueName += "_fr" + std::to_string(op.fractal);
       uniqueName += "_pd" + llvm::utohexstr(op.pad, /*LowerCase=*/false);
+    } else if (op.kind == OperandKind::Vector) {
+      for (int64_t d : op.vectorShape)
+        uniqueName += "_" + std::to_string(d);
     }
   }
   for (const auto &[attrName, attrValue] : key.contextAttrs)

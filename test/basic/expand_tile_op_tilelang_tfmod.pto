@@ -15,12 +15,11 @@
 // RUN: ptoas --pto-arch=a5 --pto-backend=vpto --enable-tile-op-expand %s -o - 2>/dev/null | FileCheck %s
 
 // After the full tile-op-expand path on the VPTO backend, the original
-// pto.tfmod should be lowered to vector-style VPTO IR.
-// fmod(a, b) = a - trunc(a/b) * b
-// CHECK: func.func @TFMOD
+// Tile op should be lowered to vector-style VPTO IR.
+
+// CHECK-LABEL: func.func @TFMOD
 // CHECK-NOT: pto.tfmod ins
 // CHECK: pto.vecscope
-// CHECK: pto.castptr
 // CHECK: pto.vlds
 // CHECK: pto.vdiv
 // CHECK: pto.vtrc

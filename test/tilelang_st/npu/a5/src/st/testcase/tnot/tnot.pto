@@ -8,12 +8,12 @@
 
 // TileLang ST kernels for pto.tnot: tload(a) + tnot(a)->b + tstore(b).
 // Multiple cases with different shapes in a single module.
-// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --vpto-emit-hivm-llvm
-// to produce LLVM IR.
+// Compiled by ptoas --enable-insert-sync --enable-tile-op-expand --pto-backend=vpto
+// to produce a fatobj object.
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 0: int8 64x64 (valid 64x64)
-  func.func @TNOT_int8_64x64(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>) {
+  func.func @TNOT_int8_64x64(%a_ptr: !pto.ptr<i8>, %b_ptr: !pto.ptr<i8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -38,29 +38,23 @@ module {
       : !pto.tensor_view<1x1x1x64x64xi8> -> !pto.partition_tensor_view<1x1x1x64x64xi8>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi8>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi8>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x64x64xi8>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xi8>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xi8>)
+             outs(%b : !pto.tile_buf<vec, 64x64xi8>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=i8, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xi8>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x64x64xi8>)
     return
   }
 
   // Case 1: uint8 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint8_60x60(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>) {
+  func.func @TNOT_uint8_60x60(%a_ptr: !pto.ptr<ui8>, %b_ptr: !pto.ptr<ui8>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -86,29 +80,23 @@ module {
       : !pto.tensor_view<1x1x1x64x64xui8> -> !pto.partition_tensor_view<1x1x1x60x60xui8>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui8, valid=60x60>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui8, valid=60x60>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x60x60xui8>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xui8, valid=60x60>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xui8, valid=60x60>)
+             outs(%b : !pto.tile_buf<vec, 64x64xui8, valid=60x60>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=ui8, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xui8, valid=60x60>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x60x60xui8>)
     return
   }
 
   // Case 2: int16 64x64 (valid 64x64)
-  func.func @TNOT_int16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>) {
+  func.func @TNOT_int16_64x64(%a_ptr: !pto.ptr<i16>, %b_ptr: !pto.ptr<i16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -133,29 +121,23 @@ module {
       : !pto.tensor_view<1x1x1x64x64xi16> -> !pto.partition_tensor_view<1x1x1x64x64xi16>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi16>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi16>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x64x64xi16>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xi16>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xi16>)
+             outs(%b : !pto.tile_buf<vec, 64x64xi16>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=i16, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xi16>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x64x64xi16>)
     return
   }
 
   // Case 3: uint16 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint16_60x60(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>) {
+  func.func @TNOT_uint16_60x60(%a_ptr: !pto.ptr<ui16>, %b_ptr: !pto.ptr<ui16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -181,29 +163,23 @@ module {
       : !pto.tensor_view<1x1x1x64x64xui16> -> !pto.partition_tensor_view<1x1x1x60x60xui16>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui16, valid=60x60>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui16, valid=60x60>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x60x60xui16>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xui16, valid=60x60>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xui16, valid=60x60>)
+             outs(%b : !pto.tile_buf<vec, 64x64xui16, valid=60x60>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=ui16, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xui16, valid=60x60>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x60x60xui16>)
     return
   }
 
   // Case 4: int32 64x64 (valid 64x64)
-  func.func @TNOT_int32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>) {
+  func.func @TNOT_int32_64x64(%a_ptr: !pto.ptr<i32>, %b_ptr: !pto.ptr<i32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c64   = arith.constant 64   : index
@@ -228,29 +204,23 @@ module {
       : !pto.tensor_view<1x1x1x64x64xi32> -> !pto.partition_tensor_view<1x1x1x64x64xi32>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi32>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xi32>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x64x64xi32>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xi32>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xi32>)
+             outs(%b : !pto.tile_buf<vec, 64x64xi32>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=i32, rows=64, cols=64, v_row=64, v_col=64,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xi32>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x64x64xi32>)
     return
   }
 
   // Case 5: uint32 64x64 (valid 60x60) - partition_view sizes = valid_shape
-  func.func @TNOT_uint32_60x60(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>) {
+  func.func @TNOT_uint32_60x60(%a_ptr: !pto.ptr<ui32>, %b_ptr: !pto.ptr<ui32>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c60   = arith.constant 60   : index
@@ -276,23 +246,17 @@ module {
       : !pto.tensor_view<1x1x1x64x64xui32> -> !pto.partition_tensor_view<1x1x1x60x60xui32>
 
     %a = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui32, valid=60x60>
     %b = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 64x64xui32, valid=60x60>
 
     pto.tload ins(%a_part : !pto.partition_tensor_view<1x1x1x60x60xui32>)
-              outs(%a : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%a : !pto.tile_buf<vec, 64x64xui32, valid=60x60>)
 
-    pto.tnot ins(%a : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-             outs(%b : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tnot ins(%a : !pto.tile_buf<vec, 64x64xui32, valid=60x60>)
+             outs(%b : !pto.tile_buf<vec, 64x64xui32, valid=60x60>)
 
-    pto.tstore ins(%b : !pto.tile_buf<loc=vec, dtype=ui32, rows=64, cols=64, v_row=60, v_col=60,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%b : !pto.tile_buf<vec, 64x64xui32, valid=60x60>)
                outs(%b_part : !pto.partition_tensor_view<1x1x1x60x60xui32>)
     return
   }

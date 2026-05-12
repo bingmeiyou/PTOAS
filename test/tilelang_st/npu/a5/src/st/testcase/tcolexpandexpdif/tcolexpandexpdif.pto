@@ -10,9 +10,9 @@
 // Matches PTO-ISA testcase parameters.
 // Key: tile_buf cols = full tensor width, v_col = valid portion
 
-module {
+module attributes {pto.target_arch = "a5", pto.kernel_kind = #pto.kernel_kind<vector>} {
   // Case 1: fp32_32_16_1_16 (float32, src0=(32,16), src1=(1,16), dst=(32,16))
-  func.func @TCOLEXPANDEXPDIF_fp32_32_16_1_16(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDEXPDIF_fp32_32_16_1_16(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -50,40 +50,31 @@ module {
       : !pto.tensor_view<1x1x1x32x16xf32> -> !pto.partition_tensor_view<1x1x1x32x16xf32>
 
     %src0_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 32x16xf32>
     
     %src1_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=16, v_row=1, v_col=16,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 1x16xf32>
     
     %dst_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 32x16xf32>
 
     pto.tload ins(%src0_part : !pto.partition_tensor_view<1x1x1x32x16xf32>)
-              outs(%src0_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src0_tile : !pto.tile_buf<vec, 32x16xf32>)
 
     pto.tload ins(%src1_part : !pto.partition_tensor_view<1x1x1x1x16xf32>)
-              outs(%src1_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=16, v_row=1, v_col=16,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src1_tile : !pto.tile_buf<vec, 1x16xf32>)
 
-    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>,
-                                    !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=16, v_row=1, v_col=16,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-                         outs(%dst_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<vec, 32x16xf32>,
+                                    !pto.tile_buf<vec, 1x16xf32>)
+                         outs(%dst_tile : !pto.tile_buf<vec, 32x16xf32>)
 
-    pto.tstore ins(%dst_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=32, cols=16, v_row=32, v_col=16,
-                                        blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x16xf32>)
                outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x16xf32>)
     return
   }
 
   // Case 2: fp32_16_32_1_32 (float32, src0=(16,32), src1=(1,32), dst=(16,32))
-  func.func @TCOLEXPANDEXPDIF_fp32_16_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) {
+  func.func @TCOLEXPANDEXPDIF_fp32_16_32_1_32(%src0_ptr: !pto.ptr<f32>, %src1_ptr: !pto.ptr<f32>, %dst_ptr: !pto.ptr<f32>) attributes {pto.aicore} {
     %c0   = arith.constant 0   : index
     %c1   = arith.constant 1   : index
     %c16  = arith.constant 16  : index
@@ -121,40 +112,31 @@ module {
       : !pto.tensor_view<1x1x1x16x32xf32> -> !pto.partition_tensor_view<1x1x1x16x32xf32>
 
     %src0_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 16x32xf32>
     
     %src1_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=32, v_row=1, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 1x32xf32>
     
     %dst_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 16x32xf32>
 
     pto.tload ins(%src0_part : !pto.partition_tensor_view<1x1x1x16x32xf32>)
-              outs(%src0_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src0_tile : !pto.tile_buf<vec, 16x32xf32>)
 
     pto.tload ins(%src1_part : !pto.partition_tensor_view<1x1x1x1x32xf32>)
-              outs(%src1_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=32, v_row=1, v_col=32,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src1_tile : !pto.tile_buf<vec, 1x32xf32>)
 
-    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>,
-                                    !pto.tile_buf<loc=vec, dtype=f32, rows=1, cols=32, v_row=1, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-                         outs(%dst_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<vec, 16x32xf32>,
+                                    !pto.tile_buf<vec, 1x32xf32>)
+                         outs(%dst_tile : !pto.tile_buf<vec, 16x32xf32>)
 
-    pto.tstore ins(%dst_tile : !pto.tile_buf<loc=vec, dtype=f32, rows=16, cols=32, v_row=16, v_col=32,
-                                        blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 16x32xf32>)
                outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x32xf32>)
     return
   }
 
   // Case 3: fp16_32_32_1_32 (float16, src0=(32,32), src1=(1,32), dst=(32,32))
-  func.func @TCOLEXPANDEXPDIF_fp16_32_32_1_32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDEXPDIF_fp16_32_32_1_32(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c32   = arith.constant 32   : index
@@ -191,40 +173,31 @@ module {
       : !pto.tensor_view<1x1x1x32x32xf16> -> !pto.partition_tensor_view<1x1x1x32x32xf16>
 
     %src0_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 32x32xf16>
     
     %src1_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=32, v_row=1, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 1x32xf16>
     
     %dst_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 32x32xf16>
 
     pto.tload ins(%src0_part : !pto.partition_tensor_view<1x1x1x32x32xf16>)
-              outs(%src0_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src0_tile : !pto.tile_buf<vec, 32x32xf16>)
 
     pto.tload ins(%src1_part : !pto.partition_tensor_view<1x1x1x1x32xf16>)
-              outs(%src1_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=32, v_row=1, v_col=32,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src1_tile : !pto.tile_buf<vec, 1x32xf16>)
 
-    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>,
-                                    !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=32, v_row=1, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-                         outs(%dst_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<vec, 32x32xf16>,
+                                    !pto.tile_buf<vec, 1x32xf16>)
+                         outs(%dst_tile : !pto.tile_buf<vec, 32x32xf16>)
 
-    pto.tstore ins(%dst_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=32, cols=32, v_row=32, v_col=32,
-                                        blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 32x32xf16>)
                outs(%dst_part : !pto.partition_tensor_view<1x1x1x32x32xf16>)
     return
   }
 
   // Case 4: fp16_16_128_1_128 (float16, src0=(16,128), src1=(1,128), dst=(16,128))
-  func.func @TCOLEXPANDEXPDIF_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) {
+  func.func @TCOLEXPANDEXPDIF_fp16_16_128_1_128(%src0_ptr: !pto.ptr<f16>, %src1_ptr: !pto.ptr<f16>, %dst_ptr: !pto.ptr<f16>) attributes {pto.aicore} {
     %c0    = arith.constant 0    : index
     %c1    = arith.constant 1    : index
     %c16   = arith.constant 16   : index
@@ -262,34 +235,25 @@ module {
       : !pto.tensor_view<1x1x1x16x128xf16> -> !pto.partition_tensor_view<1x1x1x16x128xf16>
 
     %src0_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 16x128xf16>
     
     %src1_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=128, v_row=1, v_col=128,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 1x128xf16>
     
     %dst_tile = pto.alloc_tile
-      : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                      blayout=row_major, slayout=none_box, fractal=512, pad=0>
+      : !pto.tile_buf<vec, 16x128xf16>
 
     pto.tload ins(%src0_part : !pto.partition_tensor_view<1x1x1x16x128xf16>)
-              outs(%src0_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src0_tile : !pto.tile_buf<vec, 16x128xf16>)
 
     pto.tload ins(%src1_part : !pto.partition_tensor_view<1x1x1x1x128xf16>)
-              outs(%src1_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=128, v_row=1, v_col=128,
-                                      blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+              outs(%src1_tile : !pto.tile_buf<vec, 1x128xf16>)
 
-    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>,
-                                    !pto.tile_buf<loc=vec, dtype=f16, rows=1, cols=128, v_row=1, v_col=128,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
-                         outs(%dst_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                                              blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tcolexpandexpdif ins(%src0_tile, %src1_tile : !pto.tile_buf<vec, 16x128xf16>,
+                                    !pto.tile_buf<vec, 1x128xf16>)
+                         outs(%dst_tile : !pto.tile_buf<vec, 16x128xf16>)
 
-    pto.tstore ins(%dst_tile : !pto.tile_buf<loc=vec, dtype=f16, rows=16, cols=128, v_row=16, v_col=128,
-                                        blayout=row_major, slayout=none_box, fractal=512, pad=0>)
+    pto.tstore ins(%dst_tile : !pto.tile_buf<vec, 16x128xf16>)
                outs(%dst_part : !pto.partition_tensor_view<1x1x1x16x128xf16>)
     return
   }

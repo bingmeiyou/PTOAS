@@ -205,17 +205,6 @@ ADVANCED_VECSCOPE_PTO_CALLS = frozenset(
     }
 )
 
-INFERRED_VECSCOPE_ACTIVITY_PTO_CALLS = frozenset(
-    SUPPORTED_VECSCOPE_PTO_CALLS | ADVANCED_VECSCOPE_PTO_CALLS
-)
-
-INFERRED_VECSCOPE_NEUTRAL_PTO_CALLS = frozenset(
-    {
-        "mem_bar",
-        "store_scalar",
-    }
-)
-
 ADVANCED_EXPR_PTO_CALLS = frozenset(
     {
         "ptr",
@@ -239,6 +228,28 @@ ADVANCED_TOPLEVEL_PTO_CALLS = frozenset(
         "set_loop2_stride_ubtoout",
         "set_loop1_stride_ubtoout",
         "set_loop_size_ubtoout",
+    }
+)
+
+CUBE_ONLY_PTO_CALLS = frozenset(
+    {
+        "cube_load",
+        "cube_store",
+        "cube_load_frac",
+        "bias_load",
+        "left_load",
+        "right_load",
+        "left_load_mx",
+        "right_load_mx",
+        "mad",
+        "mad_acc",
+        "mad_bias",
+        "mad_mx",
+        "mad_mx_acc",
+        "mad_mx_bias",
+        "acc_store",
+        "acc_store_gm",
+        "acc_store_ub",
     }
 )
 
@@ -451,13 +462,12 @@ def get_surface_group_tier(group_name: str) -> str:
 
 
 __all__ = [
+    "CUBE_ONLY_PTO_CALLS",
     "DEFERRED_PTO_SURFACES",
     "FOLLOW_UP_CHANGE",
     "ADVANCED_EXPR_PTO_CALLS",
     "ADVANCED_TOPLEVEL_PTO_CALLS",
     "ADVANCED_VECSCOPE_PTO_CALLS",
-    "INFERRED_VECSCOPE_ACTIVITY_PTO_CALLS",
-    "INFERRED_VECSCOPE_NEUTRAL_PTO_CALLS",
     "SUPPORTED_TOPLEVEL_PTO_CALLS",
     "SUPPORTED_VECSCOPE_PTO_CALLS",
     "BASIC_TIER",

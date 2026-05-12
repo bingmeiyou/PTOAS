@@ -15,13 +15,15 @@
 // RUN: ptoas --pto-arch=a5 --pto-backend=vpto --enable-tile-op-expand %s -o - 2>/dev/null | FileCheck %s
 
 // After the full tile-op-expand path on the VPTO backend, the original
-// pto.tcmp should be lowered to vector-style VPTO IR.
-// CHECK: func.func @TCMP
+// Tile op should be lowered to vector-style VPTO IR.
+
+// CHECK-LABEL: func.func @TCMP
 // CHECK-NOT: pto.tcmp ins
 // CHECK: pto.vecscope
-// CHECK: pto.castptr
 // CHECK: pto.vlds
 // CHECK: pto.vcmp
+// CHECK: pto.pbitcast
+// CHECK: pto.pdintlv_b8
 // CHECK: pto.psts
 
 module {

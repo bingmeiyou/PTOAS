@@ -25,6 +25,8 @@ prints the materialized MLIR module to stdout.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import importlib
 import importlib.util
 import json
 import sys
@@ -72,6 +74,11 @@ _populate_dtype_map()
 _MEMSPACE_MAP = {
     "ub": MemorySpace.UB,
     "gm": MemorySpace.GM,
+    "mat": MemorySpace.MAT,
+    "left": MemorySpace.LEFT,
+    "right": MemorySpace.RIGHT,
+    "acc": MemorySpace.ACC,
+    "bias": MemorySpace.BIAS,
 }
 
 
@@ -85,11 +92,35 @@ def _find_descriptors(module) -> list[VKernelDescriptor]:
     return result
 
 
+@contextmanager
+def _template_import_context(template_dir: Path):
+    """Temporarily expose a template directory and package parent to imports."""
+    import_roots: list[str] = []
+    for root in (template_dir, template_dir.parent):
+        root_text = str(root)
+        if root_text not in import_roots:
+            import_roots.append(root_text)
+
+    added_roots: list[str] = []
+    for root_text in reversed(import_roots):
+        if root_text in sys.path:
+            continue
+        sys.path.insert(0, root_text)
+        added_roots.append(root_text)
+
+    try:
+        yield
+    finally:
+        for root_text in added_roots:
+            try:
+                sys.path.remove(root_text)
+            except ValueError:
+                pass
+
+
 def _import_py_file(path: Path):
     """Import a .py file as a module and return it."""
-    template_parent = path.parent.parent
-    if str(template_parent) not in sys.path:
-        sys.path.insert(0, str(template_parent))
+    importlib.invalidate_caches()
     module_name = f"_tl_template_{path.stem}"
     spec = importlib.util.spec_from_file_location(module_name, str(path))
     if spec is None or spec.loader is None:
@@ -99,6 +130,7 @@ def _import_py_file(path: Path):
     try:
         spec.loader.exec_module(mod)
     except Exception as exc:
+        sys.modules.pop(module_name, None)
         print(f"expand_helper: warning: failed to import {path}: {exc}", file=sys.stderr)
         return None
     return mod
@@ -242,6 +274,22 @@ def _parse_operand_specs(spec_text: str) -> list[dict]:
                 )
             specs.append(view_spec)
             continue
+        if kind == "vector":
+            shape = raw.get("shape")
+            if not isinstance(shape, list) or not shape:
+                raise ValueError(f"operand-specs[{index}] vector shape must be a non-empty list")
+            specs.append(
+                {
+                    "kind": "vector",
+                    "dtype": dtype,
+                    "shape": _parse_optional_int_sequence(
+                        shape,
+                        field_name="vector shape",
+                        index=index,
+                    ),
+                }
+            )
+            continue
         raise ValueError(f"operand-specs[{index}] has unknown kind {kind!r}")
     return specs
 
@@ -251,6 +299,11 @@ def _operand_spec_matches_param_kind(param_kind: str, operand_kind: str) -> bool
         return param_kind == "tile"
     if operand_kind == "view":
         return param_kind in ("tensorview", "partition_tensor_view")
+    if operand_kind == "vector":
+        # Prefer an explicit builtin vector annotation, but keep scalar fallback
+        # for older templates that still model the auxiliary vector slot as a
+        # scalar-ish placeholder.
+        return param_kind in ("vector", "scalar")
     if operand_kind == "scalar":
         return param_kind == "scalar"
     return False
@@ -291,6 +344,8 @@ def _build_positional_context_attrs(operand_specs: list[dict]) -> dict[str, obje
         shape = tuple(operand_spec["shape"])
         attrs[f"{prefix}_shape"] = shape
         attrs[f"{prefix}_rank"] = len(shape)
+        if operand_spec["kind"] == "vector":
+            continue
         memory_space = operand_spec.get("memory_space")
         if isinstance(memory_space, MemorySpace):
             attrs[f"{prefix}_memory_space"] = memory_space.value
@@ -360,10 +415,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--op", required=True, help="Tile op name, e.g. pto.tadd")
     parser.add_argument("--dtype", help="Element dtype, e.g. f32")
     parser.add_argument("--shape", help="Tile shape, e.g. 16,64")
-    parser.add_argument("--memory-space", default="ub", help="Memory space (ub or gm)")
+    parser.add_argument(
+        "--memory-space",
+        default="ub",
+        help="Memory space (ub/gm/mat/left/right/acc/bias)",
+    )
     parser.add_argument(
         "--operand-specs",
-        help="JSON array describing each operand (tile/scalar schema)",
+        help="JSON array describing each operand (tile/scalar/vector schema)",
     )
     parser.add_argument(
         "--context-attrs",
@@ -413,11 +472,12 @@ def main(argv: list[str] | None = None) -> int:
 
     # Scan all .py files for descriptors.
     all_descriptors: list[VKernelDescriptor] = []
-    for py_path in sorted(template_dir.glob("*.py")):
-        mod = _import_py_file(py_path)
-        if mod is None:
-            continue
-        all_descriptors.extend(_find_descriptors(mod))
+    with _template_import_context(template_dir):
+        for py_path in sorted(template_dir.glob("*.py")):
+            mod = _import_py_file(py_path)
+            if mod is None:
+                continue
+            all_descriptors.extend(_find_descriptors(mod))
 
     if not all_descriptors:
         print(f"expand_helper: error: no @vkernel descriptors found in {template_dir}", file=sys.stderr)
@@ -461,7 +521,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 1
             continue
-        if param.kind == "scalar" and operand_spec["kind"] != "scalar":
+        if param.kind == "vector":
+            if operand_spec["kind"] != "vector":
+                print(
+                    "expand_helper: error: descriptor builtin vector parameter does not match operand-specs",
+                    file=sys.stderr,
+                )
+                return 1
+            continue
+        if param.kind == "scalar" and operand_spec["kind"] not in ("scalar", "vector"):
             print(
                 "expand_helper: error: descriptor scalar parameter does not match operand-specs",
                 file=sys.stderr,
